@@ -1,0 +1,19 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Datasets and generated features (download with tools/download_data.py)
+data/
+features.pkl
+
+# Models and build output
+*.tflite
+build/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
