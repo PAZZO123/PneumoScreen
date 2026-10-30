@@ -1,0 +1,26 @@
+# Python
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Datasets and generated features (download with tools/download_data.py)
+data/
+features.pkl
+
+# Models and build output (keep firmware model headers)
+models/*.tflite
+build/
+
+# Backup files
+*.bak
+
+# Local handover notes (not shared)
+HANDOVER.md
+
+# OS / editor
+.DS_Store
+._*
+Thumbs.db
+.vscode/
+.idea/
