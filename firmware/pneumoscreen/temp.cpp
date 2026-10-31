@@ -6,21 +6,51 @@
 
 static bool aht_ok = false;
 
-void temp_init() {
-    if (!temp_present) {
-        Serial.println("TEMP: not found");
-        return;
-    }
-    // AHT10 init: send calibrate command 0xE1 with params 0x08, 0x00
+static bool aht_do_init() {
     Wire.beginTransmission(ADDR_AHT10);
     Wire.write(0xE1);
     Wire.write(0x08);
     Wire.write(0x00);
     if (Wire.endTransmission() == 0) {
-        aht_ok = true;
         delay(20);
+        return true;
     }
+    return false;
+}
+
+void temp_init() {
+    if (!temp_present) {
+        Serial.println("TEMP: not found");
+        return;
+    }
+    aht_ok = aht_do_init();
     Serial.println(aht_ok ? "TEMP: AHT10 OK" : "TEMP: AHT10 init failed");
+}
+
+bool temp_service() {
+    static unsigned long last_check_ms = 0;
+    if (millis() - last_check_ms < 1000) return false;
+    last_check_ms = millis();
+
+    bool present = hw_probe(ADDR_AHT10);
+    if (aht_ok) {
+        if (!present) {
+            aht_ok = false;
+            temp_present = false;
+            Serial.println("TEMP: lost");
+        }
+        return false;
+    } else {
+        if (present) {
+            if (aht_do_init()) {
+                aht_ok = true;
+                temp_present = true;
+                Serial.println("TEMP: reconnected");
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
 bool temp_read(float* temp_c, float* humidity) {

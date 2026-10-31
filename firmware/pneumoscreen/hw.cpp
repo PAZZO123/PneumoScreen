@@ -2,17 +2,35 @@
 #include "hw.h"
 #include <Arduino.h>
 #include <Wire.h>
+#include "mbed.h"
 
 bool oled_present = false;
 bool spo2_present = false;
 bool cam_present  = false;
 bool temp_present = false;
+bool safe_mode    = false;
 
-// ── I2C bus recovery ────────────────────────────────────────
+// ── Watchdog ─────────────────────────────────────────────────
+// 4-second hardware watchdog. Any hung I²C call resets the board.
+// We count boot attempts in GPREGRET (survives reset, cleared on power cycle).
+// Bits [3:0] = boot attempts; bits [7:4] reserved for camera marker.
+#define GPREGRET_BOOT_MASK 0x0F
+#define BOOT_SAFE_THRESHOLD 2
+
+void hw_wdt_kick() {
+    mbed::Watchdog::get_instance().kick();
+}
+
+void hw_boot_ok() {
+    // Clear boot-attempt counter — setup() completed without hanging.
+    NRF_POWER->GPREGRET = (NRF_POWER->GPREGRET & ~GPREGRET_BOOT_MASK);
+    // Stop watchdog kicking requirement — we'll kick in loop() from now on.
+}
+
+// ── I2C bus recovery ─────────────────────────────────────────
 // If SDA or SCL is stuck LOW, toggle SCL 9 times then send a STOP.
 // This is the standard I2C bus-recovery sequence (NXP UM10204 §3.1.16).
 static bool i2c_bus_recover() {
-    // Read raw pin state
     pinMode(A4, INPUT);   // SDA
     pinMode(A5, INPUT);   // SCL
     delay(5);
@@ -34,7 +52,6 @@ static bool i2c_bus_recover() {
         delayMicroseconds(5);
         digitalWrite(A5, HIGH);
         delayMicroseconds(5);
-        // Check if SDA released
         if (digitalRead(A4) == HIGH) break;
     }
     // Generate STOP: SDA LOW → SCL HIGH → SDA HIGH
@@ -61,8 +78,7 @@ static bool i2c_bus_recover() {
     return sda && scl;
 }
 
-// Probe a single I2C address. Returns true if ACK.
-static bool probe(uint8_t addr) {
+bool hw_probe(uint8_t addr) {
     Wire.beginTransmission(addr);
     return Wire.endTransmission() == 0;
 }
@@ -70,6 +86,14 @@ static bool probe(uint8_t addr) {
 // ── Public API ──────────────────────────────────────────────
 
 bool hw_init() {
+    // Start 4-second hardware watchdog immediately.
+    // Any hang (I²C, sensor init) will reset the board.
+    mbed::Watchdog::get_instance().start(4000);
+
+    // Read and increment boot-attempt counter.
+    uint8_t attempts = (NRF_POWER->GPREGRET & GPREGRET_BOOT_MASK) + 1;
+    NRF_POWER->GPREGRET = (NRF_POWER->GPREGRET & ~GPREGRET_BOOT_MASK) | (attempts & GPREGRET_BOOT_MASK);
+
     // Pins
     pinMode(RED_LED_PIN, OUTPUT);
     pinMode(GREEN_LED_PIN, OUTPUT);
@@ -80,21 +104,39 @@ bool hw_init() {
     pinMode(LEDB, OUTPUT); digitalWrite(LEDB, HIGH);
 
     hw_led(0);
+    hw_wdt_kick();
+
+    if (attempts >= BOOT_SAFE_THRESHOLD) {
+        safe_mode = true;
+        Serial.print("SAFE_MODE: boot attempt ");
+        Serial.print(attempts);
+        Serial.println(" — skipping external I2C. Send 'R' to reset counter.");
+        // Fast red blink 3× to signal safe mode
+        for (int i = 0; i < 6; i++) {
+            hw_led(i & 1 ? 1 : 0);
+            delay(150);
+        }
+        hw_led(0);
+        return true;
+    }
 
     // Check I2C bus before Wire.begin()
     if (!i2c_bus_recover()) {
         Serial.println("ERR:I2C_STUCK");
         return false;
     }
+    hw_wdt_kick();
 
     Wire.begin();
-    Wire.setTimeout(25);
 
     // Probe devices
-    oled_present = probe(ADDR_OLED);
-    spo2_present = probe(ADDR_MAX30102);
-    temp_present = probe(ADDR_AHT10);
-    // Camera needs XCLK running to respond — probe in cam module
+    oled_present = hw_probe(ADDR_OLED);
+    hw_wdt_kick();
+    spo2_present = hw_probe(ADDR_MAX30102);
+    hw_wdt_kick();
+    temp_present = hw_probe(ADDR_AHT10);
+    hw_wdt_kick();
+    // Camera needs XCLK running to respond — probed in cam module
     cam_present  = false;
 
     Serial.print("HW: OLED=");

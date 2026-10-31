@@ -35,3 +35,8 @@ void ui_countdown(int seconds);
 
 // Clear the display
 void ui_clear();
+
+// Service the OLED connection — call once per loop().
+// Probes 0x3C every ~1 s. Returns true when the display just reconnected
+// (caller should set force_redraw and repaint the current screen).
+bool ui_service();

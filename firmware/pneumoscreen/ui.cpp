@@ -178,3 +178,38 @@ void ui_clear() {
     disp.clearDisplay();
     disp.display();
 }
+
+bool ui_service() {
+    static unsigned long last_check_ms = 0;
+    static uint8_t miss_count = 0;
+
+    if (millis() - last_check_ms < 1000) return false;
+    last_check_ms = millis();
+
+    Wire.beginTransmission(OLED_ADDR);
+    bool alive = (Wire.endTransmission() == 0);
+
+    if (disp_ok) {
+        if (!alive) {
+            miss_count++;
+            if (miss_count >= 2) {
+                disp_ok = false;
+                miss_count = 0;
+                Serial.println("OLED: lost");
+            }
+        } else {
+            miss_count = 0;
+        }
+        return false;
+    } else {
+        if (alive) {
+            if (disp.begin(SSD1306_SWITCHCAPVCC, OLED_ADDR)) {
+                disp_ok = true;
+                miss_count = 0;
+                Serial.println("OLED: reconnected");
+                return true;
+            }
+        }
+        return false;
+    }
+}

@@ -2,6 +2,9 @@
 //
 // State machine: BOOT → IDLE → BREATH → LUNG ×4 → RESULT
 // Camera and SpO2 are optional, auto-detected, never hang the board.
+// Hardware watchdog (4 s) prevents permanent hangs.
+// Safe mode (GPREGRET ≥ 2) skips external I²C after repeated boot hangs.
+// OLED and AHT10 auto-reconnect while the state machine keeps running.
 //
 // D13 button advances each step. OLED shows prompts and live values.
 // Serial: CSV lines per step + SUMMARY line.
@@ -14,10 +17,6 @@
 #include "lung.h"
 #include "breath.h"
 #include "temp.h"
-
-#ifdef PNEUMO_CAM_ENABLE
-#include "mbed.h"
-#endif
 
 // ── State machine ───────────────────────────────────────────
 enum State {
@@ -33,6 +32,7 @@ enum State {
 
 static State state = ST_BOOT;
 static unsigned long state_enter_ms = 0;
+static bool force_redraw = false;
 
 // ── Results ─────────────────────────────────────────────────
 static int result_bpm = 0;
@@ -47,6 +47,7 @@ static const char* lung_labels[4] = {"--", "--", "--", "--"};
 
 void enter_state(State s);
 void handle_serial();
+void redraw_current_state();
 
 static const char* LUNG_POS[] = {
     "Right upper", "Left upper", "Right lower", "Left lower"
@@ -58,16 +59,27 @@ void setup() {
     unsigned long t0 = millis();
     while (!Serial && millis() - t0 < 2000);
 
-    Serial.println("=== PneumoScreen v1.0 ===");
+    Serial.println("=== PneumoScreen v1.1 ===");
     Serial.flush();
 
     if (!hw_init()) {
         Serial.println("FATAL: I2C bus stuck");
+        // Try to init OLED directly (bus recovery ran, may still work)
         if (ui_init()) ui_error("I2C BUS STUCK");
         while (1) hw_error_blink();
     }
     Serial.println("HW init OK");
     Serial.flush();
+    hw_wdt_kick();
+
+    if (safe_mode) {
+        Serial.println("Running in SAFE MODE — external sensors skipped");
+        Serial.println("Send 'R' to clear and reboot normally");
+        hw_boot_ok();
+        state = ST_BOOT;
+        state_enter_ms = millis();
+        return;
+    }
 
     if (oled_present) {
         if (!ui_init()) {
@@ -78,9 +90,12 @@ void setup() {
         }
     }
     Serial.flush();
+    hw_wdt_kick();
 
     cam_init();
+    hw_wdt_kick();
     temp_init();
+    hw_wdt_kick();
 
     ui_boot(oled_present, cam_ok, spo2_present, temp_present);
 
@@ -94,30 +109,51 @@ void setup() {
     Serial.println(temp_present ? "Y" : "N");
     Serial.println("Press D13 to start");
 
+    // Mark boot as successful — clears GPREGRET boot counter
+    hw_boot_ok();
+
     state = ST_BOOT;
     state_enter_ms = millis();
 }
 
 // =====================================================================
 void loop() {
-#ifdef PNEUMO_CAM_ENABLE
-    static bool wdt_running = false;
-    if (!wdt_running && cam_ok) wdt_running = true;
-    if (wdt_running) mbed::Watchdog::get_instance().kick();
-#endif
-
+    hw_wdt_kick();
     handle_serial();
+
+    // Service OLED and AHT10 connections
+    if (ui_service()) {
+        force_redraw = true;
+    }
+    if (!safe_mode && temp_service()) {
+        // AHT10 reconnected — read a fresh value
+        temp_read(&result_temp, &result_humidity);
+    }
+
+    if (force_redraw) {
+        redraw_current_state();
+        force_redraw = false;
+    }
 
     unsigned long elapsed = millis() - state_enter_ms;
 
     switch (state) {
     case ST_BOOT:
+        if (safe_mode) {
+            // Show safe-mode indication on built-in LED (slow red pulse)
+            static unsigned long last_led_ms = 0;
+            if (millis() - last_led_ms > 500) {
+                static bool led_on = false;
+                hw_led(led_on ? 1 : 0);
+                led_on = !led_on;
+                last_led_ms = millis();
+            }
+        }
         if (elapsed > 2000) enter_state(ST_IDLE);
         break;
 
     case ST_IDLE:
         if (elapsed < 50) {
-            // Read temp if available
             if (temp_present) temp_read(&result_temp, &result_humidity);
             ui_idle();
         }
@@ -180,7 +216,6 @@ void loop() {
     }
 
     case ST_RESULT: {
-        // Read temp one more time for result
         if (temp_present) temp_read(&result_temp, &result_humidity);
 
         int worst_lung = 0;
@@ -243,6 +278,7 @@ void enter_state(State s) {
         result_spo2 = 0;
         for (int i = 0; i < 4; i++) { lung_results[i] = 0; lung_labels[i] = "--"; }
         Serial.println("STATE: IDLE");
+        ui_idle();
         break;
     case ST_BREATH:
         Serial.println("STATE: BREATH");
@@ -265,6 +301,32 @@ void enter_state(State s) {
     }
 }
 
+// Repaint the current screen after OLED reconnect
+void redraw_current_state() {
+    switch (state) {
+    case ST_IDLE:   ui_idle(); break;
+    case ST_BREATH: ui_breath(breath_bpm(), breath_status()); break;
+    case ST_LUNG1: case ST_LUNG2: case ST_LUNG3: case ST_LUNG4: {
+        int pos = state - ST_LUNG1;
+        ui_lung(pos + 1, lung_done() ? lung_class_name() : "--", "Listening...");
+        break;
+    }
+    case ST_RESULT: {
+        const char* wl = "normal";
+        for (int i = 0; i < 4; i++) {
+            if (lung_results[i] == 1) { wl = "crackles"; break; }
+            if (lung_results[i] == 2) { wl = "wheezes"; break; }
+        }
+        bool refer = false;
+        for (int i = 0; i < 4; i++)
+            if (lung_results[i] == 1 || lung_results[i] == 2) { refer = true; break; }
+        ui_result(result_bpm, result_spo2, wl, refer, result_temp);
+        break;
+    }
+    default: break;
+    }
+}
+
 // =====================================================================
 void handle_serial() {
     while (Serial.available()) {
@@ -274,6 +336,13 @@ void handle_serial() {
         else if (c >= '1' && c <= '4') {
             breath_set_age(c - '1');
             Serial.print("Age: "); Serial.println(c - '0');
+        }
+        else if (c == 'R' || c == 'r') {
+            // Clear safe-mode counter and reboot
+            NRF_POWER->GPREGRET = 0;
+            Serial.println("GPREGRET cleared — rebooting...");
+            delay(100);
+            NVIC_SystemReset();
         }
         else if (c == 'I' || c == 'i') {
             Serial.println("I2C:");
