@@ -122,7 +122,7 @@ void loop() {
     handle_serial();
 
     // Service OLED and AHT10 connections
-    if (ui_service()) {
+    if (!safe_mode && ui_service()) {
         force_redraw = true;
     }
     if (!safe_mode && temp_service()) {
@@ -344,10 +344,14 @@ void handle_serial() {
             delay(100);
             NVIC_SystemReset();
         }
+        else if ((c == 'I' || c == 'i') && safe_mode) {
+            Serial.println("I2C: scan disabled in safe mode");
+        }
         else if (c == 'I' || c == 'i') {
             Serial.println("I2C:");
             int found = 0;
             for (uint8_t a = 1; a < 127; a++) {
+                hw_wdt_kick();   // prevent watchdog firing during 127-address scan
                 Wire.beginTransmission(a);
                 if (Wire.endTransmission() == 0) {
                     Serial.print("  0x");

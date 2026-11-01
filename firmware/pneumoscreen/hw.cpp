@@ -31,8 +31,8 @@ void hw_boot_ok() {
 // If SDA or SCL is stuck LOW, toggle SCL 9 times then send a STOP.
 // This is the standard I2C bus-recovery sequence (NXP UM10204 §3.1.16).
 static bool i2c_bus_recover() {
-    pinMode(A4, INPUT);   // SDA
-    pinMode(A5, INPUT);   // SCL
+    pinMode(A4, INPUT_PULLUP);   // SDA — pull-up so floating reads HIGH
+    pinMode(A5, INPUT_PULLUP);   // SCL
     delay(5);
 
     bool sda = digitalRead(A4);
@@ -63,9 +63,9 @@ static bool i2c_bus_recover() {
     digitalWrite(A4, HIGH);
     delayMicroseconds(5);
 
-    // Release pins
-    pinMode(A4, INPUT);
-    pinMode(A5, INPUT);
+    // Release pins with pull-up so floating still reads HIGH
+    pinMode(A4, INPUT_PULLUP);
+    pinMode(A5, INPUT_PULLUP);
     delay(5);
 
     sda = digitalRead(A4);
@@ -121,9 +121,13 @@ bool hw_init() {
     }
 
     // Check I2C bus before Wire.begin()
+    // If bus is stuck, enter safe mode instead of fatal crash — keeps USB alive.
     if (!i2c_bus_recover()) {
-        Serial.println("ERR:I2C_STUCK");
-        return false;
+        safe_mode = true;
+        Serial.println("ERR:I2C_STUCK — entering safe mode (disconnect I2C devices, send R to retry)");
+        for (int i = 0; i < 6; i++) { hw_led(i & 1 ? 1 : 0); delay(150); }
+        hw_led(0);
+        return true;
     }
     hw_wdt_kick();
 
