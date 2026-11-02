@@ -1,0 +1,42 @@
+{
+  "generated_by": "shared/dsp/scripts/make_fixtures.py",
+  "reference": "firmware mfcc.cpp (g++ -O2 -ffp-contract=off) + TFLite BUILTIN_REF kernels",
+  "windows": 16,
+  "decim_windows": 2,
+  "labels": [
+    "normal/101_1b1_Al_sc_Meditron_0.wav",
+    "normal/135_2b3_Pl_mc_LittC2SE_910.wav",
+    "normal/163_8b3_Pr_mc_AKGC417L_1820.wav",
+    "normal/195_1b1_Pr_sc_Litt3200_2730.wav",
+    "crackles/104_1b1_Ll_sc_Litt3200_0.wav",
+    "crackles/130_3p2_Pr_mc_AKGC417L_466.wav",
+    "crackles/158_1p4_Pl_mc_AKGC417L_932.wav",
+    "crackles/178_2b2_Ar_mc_AKGC417L_1398.wav",
+    "wheezes/103_2b2_Ar_mc_LittC2SE_0.wav",
+    "wheezes/138_1p3_Pl_mc_AKGC417L_221.wav",
+    "wheezes/160_1b3_Lr_mc_AKGC417L_442.wav",
+    "wheezes/193_1b2_Pr_mc_AKGC417L_663.wav",
+    "synthetic/noise",
+    "synthetic/sine300",
+    "synthetic/silence",
+    "synthetic/clipping"
+  ],
+  "ref_classes": [
+    "noise",
+    "wheezes",
+    "crackles",
+    "wheezes",
+    "normal",
+    "crackles",
+    "crackles",
+    "noise",
+    "normal",
+    "crackles",
+    "crackles",
+    "noise",
+    "noise",
+    "noise",
+    "noise",
+    "noise"
+  ]
+}
