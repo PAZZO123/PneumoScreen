@@ -82,19 +82,19 @@ void fft128(float* re, float* im) {
 // ======================= compute_mfcc =======================
 
 void compute_mfcc(const float* x8000, float out[][DSP_N_FRAMES]) {
-    // 1. Subtract mean and RMS-normalise (matches pneumo_features.mfcc)
-    float buf[DSP_WIN_SAMPLES];
+    // 1. Subtract mean and RMS-normalise (matches pneumo_features.mfcc).
+    // Normalised on the fly per frame: a full copy here would be 32 KB of
+    // stack, past the 32 KB mbed main-thread stack.
     float mean = 0.0f;
     for (int i = 0; i < DSP_WIN_SAMPLES; i++) mean += x8000[i];
     mean /= DSP_WIN_SAMPLES;
 
     float rms = 0.0f;
     for (int i = 0; i < DSP_WIN_SAMPLES; i++) {
-        buf[i] = x8000[i] - mean;
-        rms += buf[i] * buf[i];
+        float d = x8000[i] - mean;
+        rms += d * d;
     }
     rms = sqrtf(rms / DSP_WIN_SAMPLES) + 1e-6f;
-    for (int i = 0; i < DSP_WIN_SAMPLES; i++) buf[i] /= rms;
 
     // 2. Per-frame STFT → mel → log → DCT
     float mel_energies[DSP_N_MELS];
@@ -106,14 +106,14 @@ void compute_mfcc(const float* x8000, float out[][DSP_N_FRAMES]) {
     float global_max = -1e30f;
     // We need two passes: first compute all log-mel, then clip, then DCT.
     // To avoid a huge buffer, we store all log-mel values.
-    float all_log_mel[DSP_N_FRAMES][DSP_N_MELS];
+    static float all_log_mel[DSP_N_FRAMES][DSP_N_MELS];   // 16 KB: static, not stack
 
     for (int f = 0; f < DSP_N_FRAMES; f++) {
         int offset = f * DSP_HOP;
 
         // Apply Hann window and copy to FFT input
         for (int i = 0; i < DSP_N_FFT; i++) {
-            frame_re[i] = buf[offset + i] * DSP_HANN[i];
+            frame_re[i] = ((x8000[offset + i] - mean) / rms) * DSP_HANN[i];
             frame_im[i] = 0.0f;
         }
 

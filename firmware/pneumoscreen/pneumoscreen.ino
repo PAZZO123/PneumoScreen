@@ -33,6 +33,13 @@ enum State {
 static State state = ST_BOOT;
 static unsigned long state_enter_ms = 0;
 static bool force_redraw = false;
+static bool serial_press = false;
+
+// D13 press, or a 'B' over serial (lets a bare board run the screening steps)
+static bool button_pressed() {
+    if (serial_press) { serial_press = false; return true; }
+    return hw_button_pressed();
+}
 
 // ── Results ─────────────────────────────────────────────────
 static int result_bpm = 0;
@@ -157,7 +164,7 @@ void loop() {
             if (temp_present) temp_read(&result_temp, &result_humidity);
             ui_idle();
         }
-        if (hw_button_pressed()) enter_state(ST_BREATH);
+        if (button_pressed()) enter_state(ST_BREATH);
         break;
 
     case ST_BREATH:
@@ -173,7 +180,7 @@ void loop() {
             breath_stop();
             enter_state(ST_LUNG1);
         }
-        if (hw_button_pressed() && elapsed > 5000) {
+        if (button_pressed() && elapsed > 5000) {
             result_bpm = breath_bpm() > 0 ? breath_bpm() : 0;
             breath_stop();
             enter_state(ST_LUNG1);
@@ -200,7 +207,7 @@ void loop() {
                      rem > 0 ? rem : 0);
             ui_lung(pos + 1, lung_done() ? lung_class_name() : "--", st);
         }
-        if (lung_done() || elapsed > LUNG_TIMEOUT_MS || hw_button_pressed()) {
+        if (lung_done() || elapsed > LUNG_TIMEOUT_MS || button_pressed()) {
             lung_results[pos] = lung_class();
             lung_labels[pos] = lung_class_name();
             lung_stop();
@@ -258,7 +265,7 @@ void loop() {
             Serial.println(refer ? "YES" : "NO");
             printed = true;
         }
-        if (hw_button_pressed()) {
+        if (button_pressed()) {
             printed = false;
             enter_state(ST_IDLE);
         }
@@ -332,6 +339,7 @@ void handle_serial() {
     while (Serial.available()) {
         char c = Serial.read();
         if (c == 'X' || c == 'x') cam_retry();
+        else if (c == 'B' || c == 'b') serial_press = true;
         else if (c == 'F') lung_handle_feed();
         else if (c >= '1' && c <= '4') {
             breath_set_age(c - '1');
