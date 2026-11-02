@@ -24,3 +24,8 @@ HANDOVER.md
 Thumbs.db
 .vscode/
 .idea/
+
+# Node / web
+node_modules/
+dist/
+*.tsbuildinfo
