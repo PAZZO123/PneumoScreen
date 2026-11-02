@@ -6,15 +6,30 @@
 
 static bool aht_ok = false;
 
+static int aht_status() {
+    if (Wire.requestFrom((uint8_t)ADDR_AHT10, (uint8_t)1) != 1) return -1;
+    return Wire.read();
+}
+
+// AHT10 calibrates with 0xE1, AHT20/AHT21 (often sold as "AHT10") with 0xBE.
+// Either way, a status byte with bit 3 set means it is already calibrated.
 static bool aht_do_init() {
-    Wire.beginTransmission(ADDR_AHT10);
-    Wire.write(0xE1);
-    Wire.write(0x08);
-    Wire.write(0x00);
-    if (Wire.endTransmission() == 0) {
+    int st = aht_status();
+    if (st < 0) return false;
+    if (st & 0x08) return true;
+    const uint8_t cmds[] = {0xE1, 0xBE};
+    for (uint8_t cmd : cmds) {
+        Wire.beginTransmission(ADDR_AHT10);
+        Wire.write(cmd);
+        Wire.write(0x08);
+        Wire.write(0x00);
+        Wire.endTransmission();
         delay(20);
-        return true;
+        st = aht_status();
+        if (st >= 0 && (st & 0x08)) return true;
     }
+    Serial.print("TEMP: calibration failed, status=0x");
+    Serial.println(st, HEX);
     return false;
 }
 

@@ -83,6 +83,12 @@ bool hw_probe(uint8_t addr) {
     return Wire.endTransmission() == 0;
 }
 
+static bool probe_retry(uint8_t addr) {
+    if (hw_probe(addr)) return true;
+    delay(5);
+    return hw_probe(addr);
+}
+
 // ── Public API ──────────────────────────────────────────────
 
 bool hw_init() {
@@ -132,13 +138,14 @@ bool hw_init() {
     hw_wdt_kick();
 
     Wire.begin();
+    delay(20);   // let the bus and freshly powered sensors settle before the first transfer
 
-    // Probe devices
-    oled_present = hw_probe(ADDR_OLED);
+    // Probe devices (twice: the first transfer after Wire.begin() can fail)
+    oled_present = probe_retry(ADDR_OLED);
     hw_wdt_kick();
-    spo2_present = hw_probe(ADDR_MAX30102);
+    spo2_present = probe_retry(ADDR_MAX30102);
     hw_wdt_kick();
-    temp_present = hw_probe(ADDR_AHT10);
+    temp_present = probe_retry(ADDR_AHT10);
     hw_wdt_kick();
     // Camera needs XCLK running to respond — probed in cam module
     cam_present  = false;

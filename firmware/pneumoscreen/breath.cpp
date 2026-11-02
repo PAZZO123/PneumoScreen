@@ -45,6 +45,8 @@ static float current_quality = 0;
 static float current_sd = 0;
 static const char* current_status = "Measuring...";
 static unsigned long lastAnalysis = 0;
+static int16_t last_mg[3];
+static bool sample_pending = false;
 
 // ── IMU abstraction ─────────────────────────────────────────
 static bool imuBegin() {
@@ -200,6 +202,7 @@ void breath_start() {
     current_sd = 0;
     current_status = "Measuring...";
     nEst = 0;
+    sample_pending = false;
     bufHead = 0;
     bufFill = 0;
     primed = false;
@@ -242,6 +245,11 @@ void breath_update() {
         if (millis() - startMs > 3000) {
             for (int k = 0; k < 3; k++)
                 buf[bufHead][k] = smooth_val[k] - baseline[k];
+            for (int k = 0; k < 3; k++) {
+                float mg = buf[bufHead][k] * 1000.0f;
+                last_mg[k] = (int16_t)constrain(lroundf(mg), -32768L, 32767L);
+            }
+            sample_pending = true;
             bufHead = (bufHead + 1) % BUF_N;
             if (bufFill < BUF_N) bufFill++;
         }
@@ -252,6 +260,13 @@ void breath_update() {
         lastAnalysis = millis();
         analyse();
     }
+}
+
+bool breath_take_sample(int16_t mg[3]) {
+    if (!sample_pending) return false;
+    sample_pending = false;
+    for (int k = 0; k < 3; k++) mg[k] = last_mg[k];
+    return true;
 }
 
 bool breath_ready()     { return ready; }

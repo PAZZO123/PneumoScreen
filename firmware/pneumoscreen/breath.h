@@ -1,6 +1,7 @@
 // breath.h – PneumoScreen non-blocking accelerometer breath rate
 // Adapted from firmware/breath_rate/breath_rate.ino with Phase 4a fixes.
 #pragma once
+#include <stdint.h>
 
 // Start breath-rate measurement. Initialises IMU, resets buffers.
 void breath_start();
@@ -10,6 +11,10 @@ void breath_update();
 
 // Returns true when a stable breath rate estimate is available.
 bool breath_ready();
+
+// Latest 10 Hz analysis sample (smoothed, baseline-removed) in mg.
+// Returns true once per new sample, then false until the next one.
+bool breath_take_sample(int16_t mg[3]);
 
 // Breath rate in breaths/min (median-filtered). 0 if not ready.
 int breath_bpm();

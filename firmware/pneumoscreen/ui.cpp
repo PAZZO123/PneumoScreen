@@ -12,6 +12,8 @@
 static Adafruit_SSD1306 disp(SCREEN_W, SCREEN_H, &Wire, -1);
 static bool disp_ok = false;
 
+bool ui_ok() { return disp_ok; }
+
 // ── Helpers ─────────────────────────────────────────────────
 static void banner() {
     disp.setTextColor(SSD1306_WHITE);

@@ -29,3 +29,7 @@ Thumbs.db
 node_modules/
 dist/
 *.tsbuildinfo
+
+# Local server data and secrets
+server/data/
+server/.env.local

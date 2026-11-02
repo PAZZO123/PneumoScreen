@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PneumoScreen dashboard</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>PneumoScreen</h1>
+    <nav id="nav" hidden>
+      <button data-view="overview">Overview</button>
+      <button data-view="babies">Babies</button>
+      <span id="who"></span>
+      <button id="logout" class="ghost">Sign out</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="login" class="card narrow" hidden>
+      <h2>Sign in</h2>
+      <form id="login-form">
+        <label>Username <input name="username" autocomplete="username" required></label>
+        <label>Password <input name="password" type="password" autocomplete="current-password" required></label>
+        <button type="submit">Sign in</button>
+        <p id="login-error" class="error" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="overview" hidden>
+      <div class="row">
+        <label>From <input type="date" id="from"></label>
+        <label>To <input type="date" id="to"></label>
+        <button id="refresh" class="ghost">Refresh</button>
+      </div>
+      <div id="totals" class="stats"></div>
+      <div class="grid">
+        <div class="card"><h2>Follow up: incomplete screenings</h2><div id="follow-up"></div></div>
+        <div class="card"><h2>Screenings per day</h2><div id="per-day"></div></div>
+        <div class="card"><h2>Per health worker</h2><div id="per-worker"></div></div>
+        <div class="card"><h2>Devices</h2><div id="devices"></div></div>
+      </div>
+    </section>
+
+    <section id="babies" hidden>
+      <form id="search" class="row">
+        <input id="q" placeholder="Search name, guardian or village" aria-label="Search babies">
+        <button type="submit">Search</button>
+      </form>
+      <div class="card"><div id="baby-list"></div></div>
+    </section>
+
+    <section id="baby" hidden>
+      <button class="ghost" data-view="babies">← Babies</button>
+      <div class="card"><h2 id="baby-name"></h2><dl id="baby-details" class="details"></dl></div>
+      <div class="grid">
+        <div class="card"><h2>Breath rate (/min)</h2><div id="trend-breath" class="chart"></div></div>
+        <div class="card"><h2>SpO₂ (%)</h2><div id="trend-spo2" class="chart"></div></div>
+        <div class="card"><h2>Temperature (°C, ambient)</h2><div id="trend-temp" class="chart"></div></div>
+      </div>
+      <div class="card"><h2>Visits</h2><div id="visits"></div></div>
+    </section>
+
+    <section id="live" hidden>
+      <button class="ghost" id="live-back">← Back</button>
+      <div class="card">
+        <h2>Live screening</h2>
+        <p id="live-status" class="muted">Connecting…</p>
+        <ol id="live-log" class="log"></ol>
+      </div>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

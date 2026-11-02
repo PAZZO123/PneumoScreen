@@ -40,3 +40,6 @@ void ui_clear();
 // Probes 0x3C every ~1 s. Returns true when the display just reconnected
 // (caller should set force_redraw and repaint the current screen).
 bool ui_service();
+
+// True while the OLED is initialised and answering.
+bool ui_ok();
