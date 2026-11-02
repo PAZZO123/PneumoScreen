@@ -13,10 +13,11 @@ It uses Node 24's built-in SQLite and TypeScript support, so there's no build st
 ```bash
 pnpm install
 pnpm --filter @pneumo/server seed     # demo accounts; passwords go to server/.env.local
+pnpm --filter @pneumo/server demo     # optional: 4 demo babies, 5 screenings, 20 WAVs (until the app exists)
 pnpm --filter @pneumo/server start    # http://localhost:8787 (it also prints the LAN address)
 ```
 
-Open the printed address for the dashboard, and sign in with an account from `server/.env.local`.
+Open the printed address for the dashboard, and sign in with an account from `server/.env.local` (if `seed` ran more than once, the last entries are the current ones). Click a follow-up or visit row to see that screening's steps, every attempt, the model output, and the recordings (playable).
 
 Data lives in `server/data/` (SQLite plus WAV recordings). Both `server/data/` and `.env.local` are git-ignored.
 

@@ -8,7 +8,7 @@ afterEach(async () => { await c.close(); });
 
 const put = (token: string, url: string, payload: unknown) => c.app.inject({ method: 'PUT', url, headers: auth(token), payload: payload as object });
 const get = (token: string, url: string) => c.app.inject({ method: 'GET', url, headers: auth(token) });
-const create = async (token: string, table: 'babies' | 'sessions' | 'steps', rec: { id: string }) => {
+const create = async <T extends { id: string }>(token: string, table: 'babies' | 'sessions' | 'steps', rec: T) => {
   const r = await put(token, `/api/${table}/${rec.id}`, rec);
   expect(r.statusCode, r.body).toBe(200);
   return r.json();
@@ -281,6 +281,7 @@ describe('live session channel', () => {
     await create(c.tokens.a, 'sessions', s);
     const watcher = await wsClient(c.app, `/ws/session/${s.id}`, { type: 'auth', token: c.tokens.sup, role: 'watcher' });
     await watcher.next('auth_ok');
+    expect(await watcher.next('presence')).toMatchObject({ publishers: 0, watchers: 1 });
     const phone = await wsClient(c.app, `/ws/session/${s.id}`, { type: 'auth', token: c.tokens.a, role: 'publisher' });
     await phone.next('auth_ok');
     expect(await watcher.next('presence')).toMatchObject({ publishers: 1, watchers: 1 });

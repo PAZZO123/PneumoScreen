@@ -12,6 +12,8 @@ let token = sessionStorage.getItem('ps_token');
 let me = null;
 let liveWs = null;
 let backView = 'overview';
+let sessionCtx = null;      // { id, baby, worker } of the open session view
+let audioUrls = [];         // blob: URLs to revoke when leaving the session view
 
 async function api(path, opts = {}) {
   const res = await fetch(path, {
@@ -25,8 +27,9 @@ async function api(path, opts = {}) {
 }
 
 function show(view) {
-  for (const id of ['login', 'overview', 'babies', 'baby', 'live']) $(`#${id}`).hidden = id !== view;
+  for (const id of ['login', 'overview', 'babies', 'baby', 'session', 'live']) $(`#${id}`).hidden = id !== view;
   if (view !== 'live' && liveWs) { liveWs.close(); liveWs = null; }
+  if (view !== 'session' && view !== 'live') { audioUrls.forEach((u) => URL.revokeObjectURL(u)); audioUrls = []; }
 }
 
 function table(headers, rows, onClick) {
@@ -80,7 +83,7 @@ async function loadOverview() {
   $('#totals').innerHTML = stats.map(([k, v]) => `<div class="stat"><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join('');
   $('#follow-up').innerHTML = table(['Baby', 'Started', 'Worker', 'Missing steps'],
     o.follow_up.map((r) => [esc(r.baby_name), esc(fmtDate(r.started_at)), esc(r.worker), `<span class="warn">${steps(r.missing) || 'steps not started'}</span>`]), true);
-  bindRows($('#follow-up'), o.follow_up, (r) => openLive(r.session_id));
+  bindRows($('#follow-up'), o.follow_up, (r) => openSession(r.session_id, { baby: r.baby_name, worker: r.worker }));
   $('#per-day').innerHTML = table(['Day', 'Screenings', 'Referred'], o.per_day.map((r) => [esc(r.day), esc(r.sessions), esc(r.referred ?? 0)]));
   $('#per-worker').innerHTML = table(['Worker', 'Screenings', 'Complete', 'Referred'], o.per_worker.map((r) => [esc(r.worker), esc(r.sessions), esc(r.complete), esc(r.referred ?? 0)]));
   $('#devices').innerHTML = table(['Device', 'Firmware', 'Last seen', 'Last worker'], o.devices.map((d) => [esc(d.device_id), esc(d.firmware_version), esc(fmtDate(d.last_seen)), esc(d.last_worker)]));
@@ -129,8 +132,71 @@ async function loadBaby(id) {
     visits.map((v) => [esc(fmtDate(v.started_at)), esc(v.worker), referTag(v.refer), esc(v.breath_bpm ?? '—'),
       lungCell(v.lung.RU), lungCell(v.lung.LU), lungCell(v.lung.RL), lungCell(v.lung.LL), esc(v.spo2 ?? '—'),
       v.status === 'complete' ? '<span class="ok">complete</span>' : `<span class="warn">missing: ${steps(v.missing)}</span>`]), true);
-  bindRows($('#visits'), visits, (v) => openLive(v.session_id));
+  bindRows($('#visits'), visits, (v) => openSession(v.session_id, { baby: b.name, worker: v.worker, babyId: id }));
 }
+
+// ── session detail ──
+const STEP_ORDER = Object.keys(STEP_LABEL);
+const fmtValues = (v) => Object.entries(v || {}).map(([k, x]) => `${esc(k)}: ${esc(x)}`).join('<br>') || '<span class="muted">—</span>';
+function fmtModel(m) {
+  if (!m) return '<span class="muted">—</span>';
+  const probs = m.probs ? Object.entries(m.probs).map(([k, p]) => `<span>${esc(k)} ${Math.round(Number(p) * 100)}%</span>`).join(' ') : '';
+  return `<b>${esc(m.class ?? '')}</b>${probs ? `<div class="probs muted">${probs}</div>` : ''}`;
+}
+const stepStatus = (s) => `<span class="${s === 'done' ? 'ok' : s === 'pending' ? 'muted' : 'warn'}">${esc(s)}</span>`;
+
+async function openSession(sessionId, ctx = {}) {
+  show('session');
+  sessionCtx = { id: sessionId, ...ctx };
+  const { session: s, steps: st, attempts } = await api(`/api/sessions/${sessionId}`);
+  $('#session-title').textContent = `${ctx.baby || 'Screening'} — ${fmtDate(s.started_at)}`;
+  const r = s.result;
+  const det = [
+    ['Health worker', esc(ctx.worker || '—')], ['Device', esc(s.device_id || '—')], ['Firmware', esc(s.firmware_version || '—')],
+    ['Started', esc(fmtDate(s.started_at))], ['Finished', esc(fmtDate(s.finished_at))],
+    ['Status', s.status === 'complete' ? '<span class="ok">complete</span>' : '<span class="warn">incomplete</span>'],
+    ['Result', r ? `${referTag(r.refer)} ${r.reasons?.length ? esc(r.reasons.join('; ')) : ''}` : '<span class="muted">no result yet</span>'],
+  ];
+  if (r?.rules_version) det.push(['Rules', esc(r.rules_version)]);
+  $('#session-details').innerHTML = det.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('');
+
+  const byStep = new Map();
+  for (const a of attempts) (byStep.get(a.step_id) ?? byStep.set(a.step_id, []).get(a.step_id)).push(a);
+  const sorted = [...st].sort((x, y) => STEP_ORDER.indexOf(x.type) - STEP_ORDER.indexOf(y.type));
+  const rows = [];
+  for (const step of sorted) {
+    const list = byStep.get(step.id) ?? [];
+    const head = [`<b>${esc(STEP_LABEL[step.type] || step.type)}</b>`, step.required ? 'yes' : '<span class="muted">optional</span>', stepStatus(step.status)];
+    if (!list.length) { rows.push([...head, '<span class="muted">not recorded</span>', '', '', '', '', '']); continue; }
+    list.forEach((a, i) => {
+      const accepted = step.accepted_attempt ? a.id === step.accepted_attempt : i === list.length - 1;
+      rows.push([...(i ? ['', '', ''] : head), `#${esc(a.n)}`, fmtValues(a.values),
+        a.quality === 'good' || !a.quality ? esc(a.quality || '—') : `<span class="warn">${esc(a.quality)}</span>`, fmtModel(a.model_output),
+        a.recording_id ? `<button class="ghost play" data-rec="${esc(a.recording_id)}">▶ Play</button>` : '<span class="muted">—</span>',
+        accepted ? '<span class="ok">✓ accepted</span>' : '<span class="muted">superseded</span>']);
+    });
+  }
+  $('#session-steps').innerHTML = table(['Step', 'Required', 'Status', 'Attempt', 'Values', 'Quality', 'Model', 'Recording', ''], rows);
+  $('#session-steps').querySelectorAll('button.play').forEach((btn) => btn.addEventListener('click', () => playRecording(btn)));
+}
+
+// The token goes in a header, never a URL, so fetch the WAV and play it from a blob.
+async function playRecording(btn) {
+  btn.disabled = true; btn.textContent = 'Loading…';
+  try {
+    const res = await fetch(`/api/recordings/${btn.dataset.rec}`, { headers: { authorization: `Bearer ${token}` } });
+    if (res.status === 401) return signOut();
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+    const url = URL.createObjectURL(await res.blob());
+    audioUrls.push(url);
+    const audio = document.createElement('audio');
+    audio.controls = true; audio.src = url;
+    btn.replaceWith(audio);
+    audio.play().catch(() => {});
+  } catch (err) { btn.disabled = false; btn.textContent = `Retry (${err.message})`; }
+}
+$('#session-back').addEventListener('click', () => (sessionCtx?.babyId ? loadBaby(sessionCtx.babyId) : backView === 'babies' ? loadBabies() : loadOverview()));
+$('#session-live').addEventListener('click', () => openLive(sessionCtx.id));
 
 // ── live ──
 function openLive(sessionId) {
@@ -155,7 +221,7 @@ function openLive(sessionId) {
     }
   };
 }
-$('#live-back').addEventListener('click', () => (backView === 'babies' ? loadBabies() : loadOverview()));
+$('#live-back').addEventListener('click', () => (sessionCtx ? openSession(sessionCtx.id, sessionCtx) : backView === 'babies' ? loadBabies() : loadOverview()));
 
 // ── start ──
 async function start() {

@@ -8,6 +8,7 @@
     "start": "node src/main.ts",
     "dev": "node --watch src/main.ts",
     "seed": "node scripts/seed.ts",
+    "demo": "node scripts/demo.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
@@ -22,7 +23,7 @@
     "@types/node": "^22.10.0",
     "@types/ws": "^8.5.13",
     "typescript": "^5.8.2",
-    "vitest": "^2.1.8",
+    "vitest": "^3.2.7",
     "ws": "^8.18.0"
   }
 }
