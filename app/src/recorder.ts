@@ -23,7 +23,8 @@ export function useStep(s: Screening, type: StepType, onChange: () => void) {
   const [err, setErr] = useState('');
   // One step at a time: the board records or sends only one.
   const deviceBusy = !!status && (status.state === 1 || status.state === 2);
-  const available = connected && !!status && (status.flags & st.def.needs) !== 0 && (!deviceBusy || prog !== null);
+  const hasSensor = connected && !!status && (status.flags & st.def.needs) !== 0;
+  const available = hasSensor && (!deviceBusy || prog !== null);
   const accepted: AttemptView | undefined = st.attempts.find((a) => a.attempt.id === st.step.accepted_attempt);
 
   const record = useCallback(async () => {
@@ -51,5 +52,5 @@ export function useStep(s: Screening, type: StepType, onChange: () => void) {
     onChange();
   }, [s, st, onChange]);
 
-  return { st, def: st.def, prog, busy: prog !== null, err, available, connected, accepted, record, skip, stop: () => void gw.stop() };
+  return { st, def: st.def, prog, busy: prog !== null, err, available, connected, hasSensor, accepted, record, skip, stop: () => void gw.stop() };
 }

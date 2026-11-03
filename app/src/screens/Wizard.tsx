@@ -150,7 +150,7 @@ function Recorder({ s, type, refresh, idle }: { s: Screening; type: StepType; re
         ))}
       {!r.busy && idle}
       {r.err && <Note tone="bad">{r.err}</Note>}
-      {!r.available && !r.busy && <Note>{r.connected ? `${sensorName(type)} was not found on the device.` : 'Connect the device to record.'}</Note>}
+      {!r.busy && (!r.connected ? <Note>Connect the device to record.</Note> : !r.hasSensor && <Note>{sensorName(type)} was not found on the device.</Note>)}
       <div className="flex flex-wrap gap-2">
         {r.busy
           ? r.prog?.phase === 'recording' && r.def.seconds > 2 && <Button variant="secondary" onClick={r.stop}><Square className="h-4 w-4" />Stop early</Button>
@@ -296,7 +296,7 @@ function LungsStep({ s, refresh, onNext }: { s: Screening; refresh: () => void; 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <Card title="Chest positions" icon={<Mic className="h-5 w-5 text-teal-600" />}>
           <ChestMap s={s} sel={sel.pos} onSel={(p) => !busy && setSel(LUNGS.find((l) => l.pos === p)!)} />
-          <ul className="mt-3 grid grid-cols-2 gap-2 text-sm">
+          <ul className="mt-3 grid grid-cols-2 gap-2 text-sm lg:grid-cols-1">
             {LUNGS.map((l) => {
               const st = s.step(l.type).step.status, c = latest(s, l.type)?.attempt.values.class as string | undefined;
               return (
