@@ -30,6 +30,38 @@ export function createWorker(db: DB, w: { username: string; name: string; passwo
   return { id, username: w.username, name: w.name, role: w.role };
 }
 
+// ── account management (supervisors) ──
+export const USERNAME = /^[a-z0-9][a-z0-9._-]{2,31}$/;
+export const MIN_PASSWORD = 8;
+
+export interface WorkerRow extends Worker { active: boolean; created_at: string; sessions: number; babies: number; last_login: string | null }
+
+export function listWorkers(db: DB): WorkerRow[] {
+  return (db.prepare(
+    `SELECT w.id, w.username, w.name, w.role, w.active, w.created_at,
+            (SELECT COUNT(*) FROM sessions s WHERE s.worker_id = w.id AND s.deleted = 0) AS sessions,
+            (SELECT COUNT(*) FROM babies b WHERE b.deleted = 0 AND COALESCE(b.assigned_to, b.created_by) = w.id) AS babies,
+            (SELECT MAX(at) FROM audit_log a WHERE a.worker_id = w.id AND a.action = 'login') AS last_login
+     FROM workers w ORDER BY w.active DESC, w.role DESC, w.name`,
+  ).all() as Array<Record<string, unknown>>).map((r) => ({ ...r, active: !!r.active } as WorkerRow));
+}
+
+/** Name, role or active; turning an account off signs it out everywhere. */
+export function updateWorker(db: DB, id: string, p: { name?: string; role?: Role; active?: boolean }): void {
+  if (p.name !== undefined) db.prepare('UPDATE workers SET name = ? WHERE id = ?').run(p.name, id);
+  if (p.role !== undefined) db.prepare('UPDATE workers SET role = ? WHERE id = ?').run(p.role, id);
+  if (p.active !== undefined) {
+    db.prepare('UPDATE workers SET active = ? WHERE id = ?').run(p.active ? 1 : 0, id);
+    if (!p.active) db.prepare('DELETE FROM auth_tokens WHERE worker_id = ?').run(id);
+  }
+}
+
+/** New password; every session of that account is signed out. */
+export function setPassword(db: DB, id: string, password: string): void {
+  db.prepare('UPDATE workers SET pw_hash = ? WHERE id = ?').run(hashPassword(password), id);
+  db.prepare('DELETE FROM auth_tokens WHERE worker_id = ?').run(id);
+}
+
 // Simple per-username login throttle: 10 failures per 5 minutes.
 const failures = new Map<string, number[]>();
 const WINDOW_MS = 5 * 60 * 1000;

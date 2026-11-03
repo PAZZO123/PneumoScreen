@@ -74,14 +74,17 @@ Each applied change gets a global, increasing `rev`.
 | GET | `/api/health` | no auth |
 | POST | `/api/login`, `/api/logout` | |
 | GET | `/api/me` | |
-| GET | `/api/workers` | supervisor; for `assigned_to` |
+| GET | `/api/workers` | supervisor: every account with role, active, children, screenings, last sign-in |
+| POST | `/api/workers` | supervisor: `{username, name, role, password}` → 201; 409 if the username is taken |
+| PATCH | `/api/workers/:id` | supervisor: `{name?, role?, active?}`; turning off signs the account out; 409 for your own supervisor access or the last supervisor |
+| POST | `/api/workers/:id/password` | supervisor: `{password}` (≥ 8 chars); signs that account out everywhere |
 | POST | `/api/babies/search` `{q?, limit?}` | a POST so names stay out of URLs and logs |
 | GET | `/api/babies/:id`, `/api/babies/:id/sessions` | |
 | PUT | `/api/babies/:id`, `/api/sessions/:id`, `/api/steps/:id` | body = record, returns an apply result |
 | POST | `/api/attempts` | body = attempt |
 | GET | `/api/sessions/:id` | `{session, steps, attempts}` |
 | GET | `/api/analytics/baby/:id` | visits, trends, lung grid |
-| GET | `/api/analytics/overview?from=YYYY-MM-DD&to=YYYY-MM-DD` | totals, per day, per worker, follow-up list, devices |
+| GET | `/api/analytics/overview?from=YYYY-MM-DD&to=YYYY-MM-DD&demo=1` | totals (incl. `danger`), per day, per worker, follow-up list, devices; demo screenings (`firmware_version: simulated`) are left out and counted in `demo_sessions` unless `demo=1` |
 
 ## Recordings (resumable)
 

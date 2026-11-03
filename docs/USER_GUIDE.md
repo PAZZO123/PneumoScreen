@@ -32,7 +32,7 @@ CHW1_USERNAME=chw1
 CHW1_PASSWORD=…
 ```
 
-To choose a password you can type easily, run this and type it twice. Nothing is shown while you type:
+A supervisor can add users and reset passwords on the dashboard's **Users** page (section 4). From the terminal, to choose a password you can type easily, run this and type it twice. Nothing is shown while you type:
 
 ```bash
 pnpm --filter @pneumo/server passwd chw1
@@ -157,11 +157,24 @@ Tick **Simulate BLE data** in the gateway card, then **Connect simulated gateway
 
 Open http://localhost:8787 and sign in as `supervisor`.
 
-- **Overview:** babies, screenings, complete or incomplete, referred, refer rate; **Follow up** lists incomplete screenings with their missing steps; screenings per day, per worker, and devices seen.
-- **Babies:** search, then open a child for breath-rate, SpO₂ and temperature trends and every visit.
-- **A visit:** each step and every attempt, model output, which attempt was accepted, and playable recordings. **Watch live** follows a screening while the phone records it.
+- **Overview:** children, screenings (complete and incomplete), **Danger**, **Referred** and the refer rate; screenings per day and per worker; devices seen.
+  - **Follow up** lists incomplete screenings and their missing steps. Click one to open it.
+  - Screenings made in demo mode are **left out of the numbers**; a note says how many. Tick **Include demo data** to count them.
+- **Babies:** search, then open a child. It shows breathing rate, SpO₂ and **body temperature** trends (from the thermometer reading; the device's room temperature is not plotted), and every visit with its result (**Danger**, **Refer** or **Normal**), lung sounds, temperature and missing steps. Demo visits carry a **demo** tag.
+- **A visit:** the result and its reasons, the danger signs the worker ticked, body temperature, every step and every attempt, the AI output, which attempt was accepted, and playable recordings. **Watch live** follows a screening while the phone records it.
 
----
+### Managing users (supervisors only)
+
+Open **Users** in the top bar. It lists everyone who can sign in, with their role, whether they can sign in, how many children and screenings they have, and when they last signed in.
+
+| To | Do this |
+|---|---|
+| Add a health worker or supervisor | Fill in **Add a user**: full name, username (3–32 lowercase letters, digits, `.` `_` or `-`), role, and a password of at least 8 characters. Give them the username and password. |
+| Rename someone or change their role | Click their row, change **Full name** or **Role**, then **Save**. |
+| Reset a forgotten password | Click their row, type a **New password**, then **Save**. They are signed out everywhere and must use the new one. |
+| Stop someone signing in | Click their row, untick **Can sign in**, then **Save**. They are signed out at once. Their children and screenings stay; tick it again to restore access. |
+
+To keep the clinic from being locked out, you can't remove your own supervisor access, and the last active supervisor can't be turned off or made a health worker.
 
 ## 5. Troubleshooting
 

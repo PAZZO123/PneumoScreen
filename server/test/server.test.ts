@@ -302,3 +302,71 @@ describe('live session channel', () => {
     expect(await x.closed()).toBe(4404);
   });
 });
+
+describe('accounts', () => {
+  const post = (token: string, url: string, payload: unknown) => c.app.inject({ method: 'POST', url, headers: auth(token), payload: payload as object });
+  const patch = (token: string, url: string, payload: unknown) => c.app.inject({ method: 'PATCH', url, headers: auth(token), payload: payload as object });
+  const loginAs = (username: string, password: string) => c.app.inject({ method: 'POST', url: '/api/login', payload: { username, password } });
+
+  it('lets only supervisors list and add accounts', async () => {
+    expect((await get(c.tokens.a, '/api/workers')).statusCode).toBe(403);
+    expect((await post(c.tokens.a, '/api/workers', { username: 'eve', name: 'Eve', role: 'supervisor', password: 'longenough' })).statusCode).toBe(403);
+    const r = await post(c.tokens.sup, '/api/workers', { username: 'CHW2', name: ' Health worker 2 ', role: 'worker', password: 'longenough' });
+    expect(r.statusCode, r.body).toBe(201);
+    expect(r.json()).toMatchObject({ username: 'chw2', name: 'Health worker 2', role: 'worker' });
+    expect((await loginAs('chw2', 'longenough')).statusCode).toBe(200);
+    const list = (await get(c.tokens.sup, '/api/workers')).json();
+    expect(list.map((w: { username: string }) => w.username).sort()).toEqual(['alice', 'bob', 'chw2', 'sup']);
+    expect(list.find((w: { username: string }) => w.username === 'alice')).toMatchObject({ active: true, sessions: 0 });
+    expect(JSON.stringify(list)).not.toContain('pw_hash');
+  });
+
+  it('validates new accounts and refuses duplicate usernames', async () => {
+    const add = (b: object) => post(c.tokens.sup, '/api/workers', { username: 'newone', name: 'New', role: 'worker', password: 'longenough', ...b });
+    expect((await add({ username: 'x' })).statusCode).toBe(400);
+    expect((await add({ password: 'short' })).statusCode).toBe(400);
+    expect((await add({ role: 'admin' })).statusCode).toBe(400);
+    expect((await add({ name: '' })).statusCode).toBe(400);
+    expect((await add({ username: 'alice' })).statusCode).toBe(409);
+  });
+
+  it('resets passwords and turns accounts off, signing them out', async () => {
+    expect((await post(c.tokens.sup, `/api/workers/${c.ids.a}/password`, { password: 'brand-new-pass' })).statusCode).toBe(200);
+    expect((await get(c.tokens.a, '/api/me')).statusCode).toBe(401);
+    expect((await loginAs('alice', 'alice-pass-123')).statusCode).toBe(401);
+    expect((await loginAs('bob', 'bob-pass-123')).statusCode).toBe(200);
+    const off = await patch(c.tokens.sup, `/api/workers/${c.ids.b}`, { active: false });
+    expect(off.json()).toMatchObject({ active: false });
+    expect((await get(c.tokens.b, '/api/me')).statusCode).toBe(401);
+    expect((await loginAs('bob', 'bob-pass-123')).statusCode).toBe(401);
+    expect((await patch(c.tokens.sup, `/api/workers/${c.ids.b}`, { active: true, name: 'Bob K', role: 'supervisor' })).json()).toMatchObject({ active: true, name: 'Bob K', role: 'supervisor' });
+  });
+
+  it('never removes the last supervisor or a supervisor\'s own access', async () => {
+    expect((await patch(c.tokens.sup, `/api/workers/${c.ids.sup}`, { role: 'worker' })).statusCode).toBe(409);
+    expect((await patch(c.tokens.sup, `/api/workers/${c.ids.sup}`, { active: false })).statusCode).toBe(409);
+    expect((await patch(c.tokens.sup, `/api/workers/${randomUUID()}`, { name: 'x' })).statusCode).toBe(404);
+  });
+});
+
+describe('triage analytics', () => {
+  it('reports the triage level, body temperature and danger signs; keeps demo screenings out', async () => {
+    const b = baby();
+    await create(c.tokens.a, 'babies', b);
+    const real = session(b.id, { started_at: at(0), result: { refer: true, level: 'danger', reasons: ['low SpO2'], rules_version: '1.1+triage-1', body_temp_c: 38.6, danger_signs: ['chest_indrawing'] } });
+    const demo = session(b.id, { started_at: at(3600000), firmware_version: 'simulated', result: { refer: false, level: 'normal', reasons: [], rules_version: '1.1+triage-1', body_temp_c: 36.9, simulated: true } });
+    await create(c.tokens.a, 'sessions', real);
+    await create(c.tokens.a, 'sessions', demo);
+
+    const v = (await get(c.tokens.a, `/api/analytics/baby/${b.id}`)).json();
+    expect(v.visits.map((x: { level: string; simulated: boolean }) => [x.level, x.simulated])).toEqual([['danger', false], ['normal', true]]);
+    expect(v.visits[0]).toMatchObject({ body_temp_c: 38.6, danger_signs: ['chest_indrawing'] });
+    expect(v.trends.body_temp_c.map((p: { value: number }) => p.value)).toEqual([38.6]);   // demo left out of trends
+
+    const o = (await get(c.tokens.sup, '/api/analytics/overview')).json();
+    expect(o.totals).toMatchObject({ sessions: 1, referred: 1, danger: 1 });
+    expect(o.demo_sessions).toBe(1);
+    const withDemo = (await get(c.tokens.sup, '/api/analytics/overview?demo=1')).json();
+    expect(withDemo.totals).toMatchObject({ sessions: 2, danger: 1 });
+  });
+});

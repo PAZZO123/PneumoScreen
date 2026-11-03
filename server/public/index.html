@@ -12,6 +12,7 @@
     <nav id="nav" hidden>
       <button data-view="overview">Overview</button>
       <button data-view="babies">Babies</button>
+      <button data-view="users" id="nav-users" hidden>Users</button>
       <span id="who"></span>
       <button id="logout" class="ghost">Sign out</button>
     </nav>
@@ -33,7 +34,9 @@
         <label>From <input type="date" id="from"></label>
         <label>To <input type="date" id="to"></label>
         <button id="refresh" class="ghost">Refresh</button>
+        <label class="check"><input type="checkbox" id="demo"> Include demo data</label>
       </div>
+      <p id="demo-note" class="muted note" hidden></p>
       <div id="totals" class="stats"></div>
       <div class="grid">
         <div class="card"><h2>Follow up: incomplete screenings</h2><div id="follow-up"></div></div>
@@ -57,7 +60,7 @@
       <div class="grid">
         <div class="card"><h2>Breath rate (/min)</h2><div id="trend-breath" class="chart"></div></div>
         <div class="card"><h2>SpO₂ (%)</h2><div id="trend-spo2" class="chart"></div></div>
-        <div class="card"><h2>Temperature (°C, ambient)</h2><div id="trend-temp" class="chart"></div></div>
+        <div class="card"><h2>Body temperature (°C, thermometer)</h2><div id="trend-temp" class="chart"></div></div>
       </div>
       <div class="card"><h2>Visits</h2><div id="visits"></div></div>
     </section>
@@ -69,6 +72,48 @@
       </div>
       <div class="card"><h2 id="session-title"></h2><dl id="session-details" class="details"></dl></div>
       <div class="card"><h2>Steps and attempts</h2><div id="session-steps"></div></div>
+    </section>
+
+    <section id="users" hidden>
+      <div class="grid users">
+        <div class="card">
+          <h2>Users</h2>
+          <p class="muted note">Everyone who can sign in to the app or this dashboard. Select a row to edit it.</p>
+          <div id="user-list"></div>
+        </div>
+        <div>
+          <div class="card" id="user-edit" hidden>
+            <h2 id="user-edit-title">Edit user</h2>
+            <form id="user-edit-form" class="form">
+              <label>Full name <input name="name" required maxlength="80"></label>
+              <label>Role
+                <select name="role"><option value="worker">Health worker</option><option value="supervisor">Supervisor</option></select>
+              </label>
+              <label class="check"><input type="checkbox" name="active"> Can sign in</label>
+              <label>New password <span class="muted">(leave empty to keep it)</span>
+                <input name="password" type="password" autocomplete="new-password" minlength="8"></label>
+              <div class="row"><button type="submit">Save</button><button type="button" class="ghost" id="user-edit-cancel">Cancel</button></div>
+              <p class="error" role="alert" id="user-edit-error"></p>
+            </form>
+          </div>
+          <div class="card">
+            <h2>Add a user</h2>
+            <form id="user-add-form" class="form">
+              <label>Full name <input name="name" required maxlength="80"></label>
+              <label>Username <input name="username" required pattern="[a-z0-9][a-z0-9._\-]{2,31}" autocomplete="off" autocapitalize="none"
+                title="3–32 lowercase letters, digits, . _ or -"></label>
+              <label>Role
+                <select name="role"><option value="worker">Health worker</option><option value="supervisor">Supervisor</option></select>
+              </label>
+              <label>Password <span class="muted">(at least 8 characters)</span>
+                <input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
+              <button type="submit">Add user</button>
+              <p class="error" role="alert" id="user-add-error"></p>
+              <p class="ok" role="status" id="user-add-ok"></p>
+            </form>
+          </div>
+        </div>
+      </div>
     </section>
 
     <section id="live" hidden>

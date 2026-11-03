@@ -4,7 +4,7 @@ import cors from '@fastify/cors';
 import fastifyStatic from '@fastify/static';
 import websocket from '@fastify/websocket';
 import type { WebSocket } from 'ws';
-import { login, logout, type Worker, workerForToken } from './auth.ts';
+import { createWorker, listWorkers, login, logout, MIN_PASSWORD, setPassword, updateWorker, USERNAME, type Worker, workerForToken } from './auth.ts';
 import { babyAnalytics, overview } from './analytics.ts';
 import { audit, currentRev, type DB, openDb } from './db.ts';
 import { applyChange, babyScope, canAccessBaby, getRecord, pull, toRecord } from './records.ts';
@@ -77,9 +77,56 @@ export async function buildServer(opts: ServerOptions): Promise<{ app: FastifyIn
     return { ok: true };
   });
   app.get('/api/me', async (req) => me(req));
-  app.get('/api/workers', async (req, reply) => {
-    if (me(req).role !== 'supervisor') return reply.code(403).send({ error: 'supervisors only' });
-    return db.prepare('SELECT id, username, name, role, active FROM workers ORDER BY name').all();
+  // ── accounts (supervisors only) ──
+  const supervisorOnly = (req: FastifyRequest, reply: FastifyReply) => {
+    if (me(req).role === 'supervisor') return false;
+    reply.code(403).send({ error: 'supervisors only' });
+    return true;
+  };
+  const workerExists = (id: string) => !!db.prepare('SELECT 1 FROM workers WHERE id = ?').get(id);
+  const activeSupervisors = () => (db.prepare("SELECT COUNT(*) AS n FROM workers WHERE role = 'supervisor' AND active = 1").get() as { n: number }).n;
+  const badName = (v: unknown) => typeof v !== 'string' || !v.trim() || v.trim().length > 80;
+
+  app.get('/api/workers', async (req, reply) => (supervisorOnly(req, reply) ? reply : listWorkers(db)));
+  app.post('/api/workers', async (req, reply) => {
+    if (supervisorOnly(req, reply)) return reply;
+    const b = (req.body ?? {}) as { username?: unknown; name?: unknown; role?: unknown; password?: unknown };
+    const username = typeof b.username === 'string' ? b.username.trim().toLowerCase() : '';
+    if (!USERNAME.test(username)) return reply.code(400).send({ error: 'username: 3–32 lowercase letters, digits, . _ or -' });
+    if (badName(b.name)) return reply.code(400).send({ error: 'name: required, up to 80 characters' });
+    if (b.role !== 'worker' && b.role !== 'supervisor') return reply.code(400).send({ error: 'role: worker or supervisor' });
+    if (typeof b.password !== 'string' || b.password.length < MIN_PASSWORD) return reply.code(400).send({ error: `password: at least ${MIN_PASSWORD} characters` });
+    if (db.prepare('SELECT 1 FROM workers WHERE username = ?').get(username)) return reply.code(409).send({ error: 'that username is taken' });
+    const w = createWorker(db, { username, name: (b.name as string).trim(), role: b.role, password: b.password });
+    audit(db, me(req).id, 'create', 'worker', w.id);
+    return reply.code(201).send(w);
+  });
+  app.patch<{ Params: { id: string } }>('/api/workers/:id', async (req, reply) => {
+    if (supervisorOnly(req, reply)) return reply;
+    const id = req.params.id;
+    if (!UUID.test(id) || !workerExists(id)) return reply.code(404).send({ error: 'not found' });
+    const b = (req.body ?? {}) as { name?: unknown; role?: unknown; active?: unknown };
+    if (b.name !== undefined && badName(b.name)) return reply.code(400).send({ error: 'name: required, up to 80 characters' });
+    if (b.role !== undefined && b.role !== 'worker' && b.role !== 'supervisor') return reply.code(400).send({ error: 'role: worker or supervisor' });
+    if (b.active !== undefined && typeof b.active !== 'boolean') return reply.code(400).send({ error: 'active: true or false' });
+    // Never leave the clinic without an active supervisor, and don't let one lock themselves out.
+    const target = db.prepare('SELECT role, active FROM workers WHERE id = ?').get(id) as { role: string; active: number };
+    const losesSupervisor = target.role === 'supervisor' && target.active === 1 && (b.role === 'worker' || b.active === false);
+    if (losesSupervisor && id === me(req).id) return reply.code(409).send({ error: 'you cannot remove your own supervisor access' });
+    if (losesSupervisor && activeSupervisors() <= 1) return reply.code(409).send({ error: 'keep at least one active supervisor' });
+    updateWorker(db, id, { name: b.name === undefined ? undefined : (b.name as string).trim(), role: b.role as Worker['role'] | undefined, active: b.active as boolean | undefined });
+    audit(db, me(req).id, 'update', 'worker', id);
+    return listWorkers(db).find((w) => w.id === id);
+  });
+  app.post<{ Params: { id: string } }>('/api/workers/:id/password', async (req, reply) => {
+    if (supervisorOnly(req, reply)) return reply;
+    const id = req.params.id;
+    if (!UUID.test(id) || !workerExists(id)) return reply.code(404).send({ error: 'not found' });
+    const pw = (req.body as { password?: unknown } | undefined)?.password;
+    if (typeof pw !== 'string' || pw.length < MIN_PASSWORD) return reply.code(400).send({ error: `password: at least ${MIN_PASSWORD} characters` });
+    setPassword(db, id, pw);
+    audit(db, me(req).id, 'password', 'worker', id);
+    return { ok: true };
   });
 
   // ── babies ──
@@ -172,7 +219,8 @@ export async function buildServer(opts: ServerOptions): Promise<{ app: FastifyIn
     audit(db, me(req).id, 'read', 'baby_analytics', req.params.id);
     return babyAnalytics(db, req.params.id);
   });
-  app.get<{ Querystring: { from?: string; to?: string } }>('/api/analytics/overview', async (req) => overview(db, me(req), req.query));
+  app.get<{ Querystring: { from?: string; to?: string; demo?: string } }>('/api/analytics/overview', async (req) =>
+    overview(db, me(req), { from: req.query.from, to: req.query.to, demo: req.query.demo === '1' }));
 
   // ── websockets ──
   const authFirst = (ws: WebSocket, onAuth: (w: Worker, msg: Record<string, unknown>) => void, onMsg: (msg: Record<string, unknown>) => void) => {

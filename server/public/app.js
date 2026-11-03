@@ -27,7 +27,7 @@ async function api(path, opts = {}) {
 }
 
 function show(view) {
-  for (const id of ['login', 'overview', 'babies', 'baby', 'session', 'live']) $(`#${id}`).hidden = id !== view;
+  for (const id of ['login', 'overview', 'babies', 'baby', 'session', 'users', 'live']) $(`#${id}`).hidden = id !== view;
   if (view !== 'live' && liveWs) { liveWs.close(); liveWs = null; }
   if (view !== 'session' && view !== 'live') { audioUrls.forEach((u) => URL.revokeObjectURL(u)); audioUrls = []; }
 }
@@ -41,7 +41,15 @@ function table(headers, rows, onClick) {
 function bindRows(container, items, fn) {
   container.querySelectorAll('tr[data-i]').forEach((tr) => tr.addEventListener('click', () => fn(items[Number(tr.dataset.i)])));
 }
-const referTag = (r) => (r == null ? '<span class="muted">—</span>' : r ? '<span class="tag refer">Refer</span>' : '<span class="tag ok">No refer</span>');
+// Triage from the app: danger (refer now), refer (today), normal. Older records only have `refer`.
+const levelOf = (level, refer) => level ?? (refer == null ? null : refer ? 'refer' : 'normal');
+const levelTag = (level, refer) => ({
+  danger: '<span class="tag danger">Danger</span>', refer: '<span class="tag refer">Refer</span>', normal: '<span class="tag ok">Normal</span>',
+}[levelOf(level, refer)] ?? '<span class="muted">—</span>');
+const demoTag = (on) => (on ? ' <span class="tag demo">demo</span>' : '');
+const DANGER_SIGN = { cannot_drink: 'Not able to drink or breastfeed', vomits_all: 'Vomits everything', convulsions: 'Convulsions',
+  lethargic: 'Lethargic or unconscious', chest_indrawing: 'Chest indrawing', stridor: 'Stridor when calm' };
+const fmtTemp = (t) => (typeof t === 'number' ? `${t.toFixed(1)} °C${t >= 38 ? ' <span class="refer">fever</span>' : ''}` : '—');
 const steps = (list) => list.map((t) => esc(STEP_LABEL[t] || t)).join(', ');
 
 // ── auth ──
@@ -65,7 +73,8 @@ $('#login-form').addEventListener('submit', async (e) => {
   } catch (err) { $('#login-error').textContent = err.message; }
 });
 $('#logout').addEventListener('click', signOut);
-document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => (b.dataset.view === 'overview' ? loadOverview() : loadBabies())));
+const VIEWS = { overview: () => loadOverview(), babies: () => loadBabies(), users: () => loadUsers() };
+document.querySelectorAll('[data-view]').forEach((b) => b.addEventListener('click', () => VIEWS[b.dataset.view]()));
 
 // ── overview ──
 async function loadOverview() {
@@ -74,21 +83,27 @@ async function loadOverview() {
   const qs = new URLSearchParams();
   if ($('#from').value) qs.set('from', $('#from').value);
   if ($('#to').value) qs.set('to', new Date(new Date($('#to').value).getTime() + 86400000).toISOString().slice(0, 10));
+  if ($('#demo').checked) qs.set('demo', '1');
   const o = await api(`/api/analytics/overview?${qs}`);
   const t = o.totals;
   const stats = [
     ['Babies', t.babies], ['Screened', t.babies_screened], ['Screenings', t.sessions], ['Complete', t.complete],
-    ['Incomplete', t.incomplete], ['Referred', t.referred], ['Refer rate', t.refer_rate == null ? '—' : `${Math.round(t.refer_rate * 100)}%`],
+    ['Incomplete', t.incomplete], ['Danger', t.danger ?? 0, 'danger'], ['Referred', t.referred, 'refer'],
+    ['Refer rate', t.refer_rate == null ? '—' : `${Math.round(t.refer_rate * 100)}%`],
   ];
-  $('#totals').innerHTML = stats.map(([k, v]) => `<div class="stat"><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join('');
+  $('#totals').innerHTML = stats.map(([k, v, tone]) => `<div class="stat ${tone ?? ''}"><b>${esc(v)}</b><span>${esc(k)}</span></div>`).join('');
+  $('#demo-note').hidden = !o.demo_sessions;
+  $('#demo-note').textContent = o.demo_sessions ? `${o.demo_sessions} demo screening${o.demo_sessions === 1 ? ' is' : 's are'} left out of these numbers.` : '';
   $('#follow-up').innerHTML = table(['Baby', 'Started', 'Worker', 'Missing steps'],
-    o.follow_up.map((r) => [esc(r.baby_name), esc(fmtDate(r.started_at)), esc(r.worker), `<span class="warn">${steps(r.missing) || 'steps not started'}</span>`]), true);
+    o.follow_up.map((r) => [esc(r.baby_name) + demoTag(r.simulated), esc(fmtDate(r.started_at)), esc(r.worker), `<span class="warn">${steps(r.missing) || 'steps not started'}</span>`]), true);
   bindRows($('#follow-up'), o.follow_up, (r) => openSession(r.session_id, { baby: r.baby_name, worker: r.worker }));
-  $('#per-day').innerHTML = table(['Day', 'Screenings', 'Referred'], o.per_day.map((r) => [esc(r.day), esc(r.sessions), esc(r.referred ?? 0)]));
+  $('#per-day').innerHTML = table(['Day', 'Screenings', 'Referred', 'Danger'], o.per_day.map((r) => [esc(r.day), esc(r.sessions), esc(r.referred ?? 0),
+    r.danger ? `<span class="danger-text">${esc(r.danger)}</span>` : '0']));
   $('#per-worker').innerHTML = table(['Worker', 'Screenings', 'Complete', 'Referred'], o.per_worker.map((r) => [esc(r.worker), esc(r.sessions), esc(r.complete), esc(r.referred ?? 0)]));
   $('#devices').innerHTML = table(['Device', 'Firmware', 'Last seen', 'Last worker'], o.devices.map((d) => [esc(d.device_id), esc(d.firmware_version), esc(fmtDate(d.last_seen)), esc(d.last_worker)]));
 }
 $('#refresh').addEventListener('click', loadOverview);
+$('#demo').addEventListener('change', loadOverview);
 
 // ── babies ──
 async function loadBabies(q = $('#q').value) {
@@ -125,12 +140,12 @@ async function loadBaby(id) {
   $('#baby-details').innerHTML = det.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v || '—')}</dd>`).join('');
   $('#trend-breath').innerHTML = sparkline(a.trends.breath_bpm, '');
   $('#trend-spo2').innerHTML = sparkline(a.trends.spo2, '%');
-  $('#trend-temp').innerHTML = sparkline(a.trends.temp_c, '°');
+  $('#trend-temp').innerHTML = sparkline(a.trends.body_temp_c ?? [], '°');
   const lungCell = (c) => (c == null ? '<span class="muted">—</span>' : c === 'normal' ? esc(c) : `<span class="${c === 'noise' ? 'warn' : 'refer'}">${esc(c)}</span>`);
   const visits = [...a.visits].reverse();
-  $('#visits').innerHTML = table(['Date', 'Worker', 'Result', 'Breath', 'R-up', 'L-up', 'R-low', 'L-low', 'SpO₂', 'Status'],
-    visits.map((v) => [esc(fmtDate(v.started_at)), esc(v.worker), referTag(v.refer), esc(v.breath_bpm ?? '—'),
-      lungCell(v.lung.RU), lungCell(v.lung.LU), lungCell(v.lung.RL), lungCell(v.lung.LL), esc(v.spo2 ?? '—'),
+  $('#visits').innerHTML = table(['Date', 'Worker', 'Result', 'Breath', 'R-up', 'L-up', 'R-low', 'L-low', 'SpO₂', 'Temp', 'Status'],
+    visits.map((v) => [esc(fmtDate(v.started_at)) + demoTag(v.simulated), esc(v.worker), levelTag(v.level, v.refer), esc(v.breath_bpm ?? '—'),
+      lungCell(v.lung.RU), lungCell(v.lung.LU), lungCell(v.lung.RL), lungCell(v.lung.LL), esc(v.spo2 ?? '—'), fmtTemp(v.body_temp_c),
       v.status === 'complete' ? '<span class="ok">complete</span>' : `<span class="warn">missing: ${steps(v.missing)}</span>`]), true);
   bindRows($('#visits'), visits, (v) => openSession(v.session_id, { baby: b.name, worker: v.worker, babyId: id }));
 }
@@ -155,8 +170,11 @@ async function openSession(sessionId, ctx = {}) {
     ['Health worker', esc(ctx.worker || '—')], ['Device', esc(s.device_id || '—')], ['Firmware', esc(s.firmware_version || '—')],
     ['Started', esc(fmtDate(s.started_at))], ['Finished', esc(fmtDate(s.finished_at))],
     ['Status', s.status === 'complete' ? '<span class="ok">complete</span>' : '<span class="warn">incomplete</span>'],
-    ['Result', r ? `${referTag(r.refer)} ${r.reasons?.length ? esc(r.reasons.join('; ')) : ''}` : '<span class="muted">no result yet</span>'],
+    ['Result', r ? `${levelTag(r.level, r.refer)} ${r.reasons?.length ? esc(r.reasons.join('; ')) : ''}` : '<span class="muted">no result yet</span>'],
+    ['Danger signs', r?.danger_signs?.length ? `<span class="danger-text">${r.danger_signs.map((d) => esc(DANGER_SIGN[d] ?? d)).join(', ')}</span>` : 'none recorded'],
+    ['Body temperature', fmtTemp(r?.body_temp_c)],
   ];
+  if (s.firmware_version === 'simulated') det.unshift(['Data', '<span class="tag demo">demo</span> simulated device: not a real screening']);
   if (r?.rules_version) det.push(['Rules', esc(r.rules_version)]);
   $('#session-details').innerHTML = det.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('');
 
@@ -198,6 +216,52 @@ async function playRecording(btn) {
 $('#session-back').addEventListener('click', () => (sessionCtx?.babyId ? loadBaby(sessionCtx.babyId) : backView === 'babies' ? loadBabies() : loadOverview()));
 $('#session-live').addEventListener('click', () => openLive(sessionCtx.id));
 
+// ── users (supervisors) ──
+let users = [];
+let editing = null;
+async function loadUsers() {
+  show('users');
+  users = await api('/api/workers');
+  $('#user-list').innerHTML = table(['Name', 'Username', 'Role', 'Status', 'Children', 'Screenings', 'Last sign-in'],
+    users.map((u) => [`<b>${esc(u.name)}</b>${u.id === me.id ? ' <span class="muted">(you)</span>' : ''}`, esc(u.username),
+      u.role === 'supervisor' ? 'Supervisor' : 'Health worker',
+      u.active ? '<span class="ok">active</span>' : '<span class="muted">turned off</span>',
+      esc(u.babies), esc(u.sessions), esc(u.last_login ? fmtDate(u.last_login) : 'never')]), true);
+  bindRows($('#user-list'), users, editUser);
+}
+function editUser(u) {
+  editing = u;
+  const f = $('#user-edit-form');
+  $('#user-edit').hidden = false;
+  $('#user-edit-title').textContent = `Edit ${u.name}`;
+  f.name.value = u.name; f.role.value = u.role; f.active.checked = u.active; f.password.value = '';
+  $('#user-edit-error').textContent = '';
+  f.name.focus();
+}
+$('#user-edit-cancel').addEventListener('click', () => { $('#user-edit').hidden = true; editing = null; });
+$('#user-edit-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  $('#user-edit-error').textContent = '';
+  try {
+    await api(`/api/workers/${editing.id}`, { method: 'PATCH', body: JSON.stringify({ name: f.name.value, role: f.role.value, active: f.active.checked }) });
+    if (f.password.value) await api(`/api/workers/${editing.id}/password`, { method: 'POST', body: JSON.stringify({ password: f.password.value }) });
+    $('#user-edit').hidden = true; editing = null;
+    await loadUsers();
+  } catch (err) { $('#user-edit-error').textContent = err.message; }
+});
+$('#user-add-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = e.target;
+  $('#user-add-error').textContent = ''; $('#user-add-ok').textContent = '';
+  try {
+    const u = await api('/api/workers', { method: 'POST', body: JSON.stringify({ name: f.name.value, username: f.username.value, role: f.role.value, password: f.password.value }) });
+    f.reset();
+    $('#user-add-ok').textContent = `Added ${u.name}. They can sign in as “${u.username}”.`;
+    await loadUsers();
+  } catch (err) { $('#user-add-error').textContent = err.message; }
+});
+
 // ── live ──
 function openLive(sessionId) {
   show('live');
@@ -229,6 +293,7 @@ async function start() {
   try { me = await api('/api/me'); } catch { return; }
   $('#who').textContent = `${me.name} (${me.role})`;
   $('#nav').hidden = false;
+  $('#nav-users').hidden = me.role !== 'supervisor';
   await loadOverview();
 }
 start();
