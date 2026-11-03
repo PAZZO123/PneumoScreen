@@ -14,6 +14,7 @@ It uses Node 24's built-in SQLite and TypeScript support, so there's no build st
 pnpm install
 pnpm --filter @pneumo/server seed     # demo accounts; passwords go to server/.env.local
 pnpm --filter @pneumo/server demo     # optional: 4 demo babies, 5 screenings, 20 WAVs (until the app exists)
+pnpm --filter @pneumo/server passwd chw1   # optional: set a password you choose (asked in the terminal)
 pnpm --filter @pneumo/server start    # http://localhost:8787 (it also prints the LAN address)
 ```
 
