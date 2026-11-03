@@ -84,3 +84,44 @@ export function evaluate(input: ScreeningInput): ScreeningResult {
     rulesVersion: RULES_VERSION,
   };
 }
+
+// ── three-level triage (app) ─────────────────────────────────
+// WHO IMCI general danger signs, as the health worker observes them.
+export const DANGER_SIGNS = [
+  { id: 'cannot_drink', label: 'Not able to drink or breastfeed' },
+  { id: 'vomits_all', label: 'Vomits everything' },
+  { id: 'convulsions', label: 'Has had convulsions' },
+  { id: 'lethargic', label: 'Lethargic or unconscious' },
+  { id: 'chest_indrawing', label: 'Lower chest wall indrawing' },
+  { id: 'stridor', label: 'Stridor when calm' },
+] as const;
+export type DangerSign = (typeof DANGER_SIGNS)[number]['id'];
+export const FEVER_FROM_C = 38;
+
+export type TriageLevel = 'normal' | 'refer' | 'danger';
+export interface TriageInput extends ScreeningInput {
+  /** Body temperature from a thermometer; the board's sensor is ambient and never used here. */
+  bodyTempC?: number | null;
+  dangerSigns?: readonly DangerSign[];
+}
+export interface TriageResult extends ScreeningResult { level: TriageLevel; urgent: string[] }
+
+/**
+ * danger: any IMCI danger sign, SpO₂ < 90 %, or fever with crackles → refer urgently.
+ * refer:  the referral rules above (fast breathing, crackles/wheezes) or fever ≥ 38 °C.
+ * normal: otherwise (it may still be incomplete; see `missing`).
+ */
+export function triage(input: TriageInput): TriageResult {
+  const base = evaluate(input);
+  const urgent: string[] = [];
+  for (const id of input.dangerSigns ?? []) urgent.push(`danger sign: ${DANGER_SIGNS.find((d) => d.id === id)?.label ?? id}`);
+  if (input.spo2 != null && input.spo2 > 0 && input.spo2 < SPO2_REFER_BELOW) urgent.push(`low oxygen: SpO₂ ${input.spo2}%`);
+  const fever = input.bodyTempC != null && input.bodyTempC >= FEVER_FROM_C;
+  const crackles = LUNG_POSITIONS.some((p) => input.lung?.[p] === 'crackles');
+  if (fever && crackles) urgent.push(`fever ${input.bodyTempC!.toFixed(1)} °C with crackles`);
+  const reasons = [...base.reasons];
+  if (fever) reasons.push(`fever: ${input.bodyTempC!.toFixed(1)} °C (≥ ${FEVER_FROM_C})`);
+  const level: TriageLevel = urgent.length ? 'danger' : reasons.length ? 'refer' : 'normal';
+  return { ...base, reasons, refer: level !== 'normal', level, urgent, rulesVersion: TRIAGE_VERSION };
+}
+export const TRIAGE_VERSION = `${RULES_VERSION}+triage-1`;

@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
-  computeMfcc, Decimator, DSP, evaluate, ageBand, LungClassifier, MODEL, quantizeInput, roundAway, TfliteModel,
+  computeMfcc, Decimator, DSP, evaluate, triage, ageBand, LungClassifier, MODEL, quantizeInput, roundAway, TfliteModel,
 } from './index';
 import { multiplyByQuantizedMultiplier, quantizeMultiplier, roundingDivideByPOT, saturatingRoundingDoublingHighMul } from './tflite/interpreter';
 
@@ -188,6 +188,18 @@ describe('referral rules', () => {
     expect(ageBand(new Date(2021, 10, 3), at)).toBe(2);
     expect(ageBand(new Date(2021, 10, 2), at)).toBe(3);
     expect(() => ageBand(new Date(2027, 0, 1), at)).toThrow();
+  });
+
+  it('triages into normal, refer and danger', () => {
+    expect(triage({ ageBand: 2, breathBpm: 30, lung: lungOk }).level).toBe('normal');
+    expect(triage({ ageBand: 2, breathBpm: 45, lung: lungOk }).level).toBe('refer');
+    expect(triage({ ageBand: 2, breathBpm: 30, lung: lungOk, bodyTempC: 38.2 }).level).toBe('refer');
+    expect(triage({ ageBand: 2, breathBpm: 30, lung: lungOk, bodyTempC: 37.9 }).level).toBe('normal');
+    expect(triage({ ageBand: 2, breathBpm: 30, lung: { ...lungOk, RL: 'crackles' }, bodyTempC: 38.5 }).level).toBe('danger');
+    expect(triage({ ageBand: 2, breathBpm: 30, lung: lungOk, spo2: 88 }).level).toBe('danger');
+    const d = triage({ ageBand: 1, breathBpm: 30, lung: lungOk, dangerSigns: ['chest_indrawing'] });
+    expect(d.level).toBe('danger');
+    expect(d.urgent[0]).toContain('indrawing');
   });
 
   it('has class names that match the model', () => {
