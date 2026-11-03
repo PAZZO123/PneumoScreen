@@ -1,0 +1,62 @@
+[
+ {
+  "id": "intro",
+  "text": "This is PneumoScreen: a low-cost aid that helps community health workers spot pneumonia in young children.",
+  "file": "voice/00-intro.aiff",
+  "seconds": 5.76
+ },
+ {
+  "id": "login",
+  "text": "The health worker signs in to the screening app.",
+  "file": "voice/01-login.aiff",
+  "seconds": 2.26
+ },
+ {
+  "id": "connect",
+  "text": "They connect the Bluetooth sensor device. The app shows which sensors are working, and what the device's own screen says.",
+  "file": "voice/02-connect.aiff",
+  "seconds": 6.67
+ },
+ {
+  "id": "patient",
+  "text": "Next, they choose the child. The child's age sets the World Health Organization fast-breathing threshold, and the worker checks for danger signs.",
+  "file": "voice/03-patient.aiff",
+  "seconds": 8.45
+ },
+ {
+  "id": "breath",
+  "text": "The device rests on the belly and counts every breath, with a large countdown the worker can read at arm's length.",
+  "file": "voice/04-breath.aiff",
+  "seconds": 5.75
+ },
+ {
+  "id": "temp",
+  "text": "A thermometer reading is added. Fever is flagged at thirty-eight degrees.",
+  "file": "voice/05-temp.aiff",
+  "seconds": 3.87
+ },
+ {
+  "id": "lungs",
+  "text": "Then the microphone records lung sounds at four chest positions. The A.I. model runs on the phone itself. If a recording is too noisy, the app asks to record it again.",
+  "file": "voice/06-lungs.aiff",
+  "seconds": 9.59
+ },
+ {
+  "id": "triage",
+  "text": "Finally, the app combines everything into one clear result: normal, refer, or danger. And it saves the screening to the clinic server.",
+  "file": "voice/07-triage.aiff",
+  "seconds": 8.07
+ },
+ {
+  "id": "dashboard",
+  "text": "At the clinic, supervisors follow every screening and every recording, and see which children need follow-up.",
+  "file": "voice/08-dashboard.aiff",
+  "seconds": 6.14
+ },
+ {
+  "id": "outro",
+  "text": "PneumoScreen. Early warning. Timely referral.",
+  "file": "voice/09-outro.aiff",
+  "seconds": 3.07
+ }
+]

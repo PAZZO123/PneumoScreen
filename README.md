@@ -11,7 +11,15 @@ It combines four signals:
 | SpO2 + heart rate | MAX30102 | Sensor library algorithm |
 | Temperature | External body-temperature sensor | Direct reading |
 
-Results stream over USB serial to a live web dashboard.
+The board is a Bluetooth gateway: a phone or laptop app guides the health worker, runs the lung-sound AI and the WHO IMCI rules, and saves screenings to a clinic server with a supervisor dashboard.
+
+**Using it:** [docs/USER_GUIDE.md](docs/USER_GUIDE.md): default users, how to start everything, and a step-by-step screening guide.
+
+| Part | Folder | Start |
+|---|---|---|
+| Screening app (health worker) | `app/` | `pnpm --filter @pneumo/app dev` → http://localhost:5173 |
+| Clinic server and dashboard (supervisor) | `server/` | `pnpm --filter @pneumo/server start` → http://localhost:8787 |
+| Gateway firmware | `firmware/pneumoscreen/` | see [docs/BLE_PROTOCOL.md](docs/BLE_PROTOCOL.md) |
 
 ## Repository layout
 
