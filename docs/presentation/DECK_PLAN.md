@@ -78,3 +78,19 @@ The deck was written before the prototype worked. It now needs to show what was 
 - `validate.py` on the new deck, and a PowerPoint render of every slide, checked for overflow, overlap, contrast and alignment.
 - Text QA for typos and leftover placeholder text.
 - The video plays in PowerPoint (Slide Show).
+
+## v3: the required structure (November 2026)
+
+The talk must follow **problem → solution → technology → conclusion**, with a **demo** and **testing**. v3 keeps every v2 slide and its numbers, reorders them, adds signposting, and adds a testing section:
+
+| Section | Slides |
+|---|---|
+| Opening | Hook (2,000 children a day), title, **agenda** (new) |
+| 1 · Problem | The gap (700,000+ a year); three stat cards (2,000 / 700,000+ / 13%) |
+| 2 · Solution | Four signals; the health worker's four steps; normal / refer / danger |
+| 3 · Technology | How it works (device → phone → clinic server); WHO IMCI thresholds (Figure 1) |
+| 4 · Demo | The re-voiced demo video (African-context voice-over), dashboard, device-photo slot |
+| 5 · Testing (new) | How we tested: 62 automated tests, bit-exact match with the firmware, real-board recordings, end-to-end; lung-sound AI results (Figure 2: recall 77% / 72% / 63% in children with pneumonia; 0.57 overall; 8,096 windows, 516 patients; 20.8 KB) |
+| 6 · Conclusion | What we have and what comes next; roadmap; the ask; references [1]–[5] |
+
+Each content slide carries a small "N · Section" label above its title so the audience always knows where the talk is.

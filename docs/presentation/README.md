@@ -7,9 +7,9 @@
 | `demo-narration.json` | The voice-over script, one line per scene |
 | `images/` | App and dashboard screenshots from the demo run, the video poster frame |
 | `tools/record.mjs` | Records the demo: drives Chrome (puppeteer-core) through a screening and the dashboard |
-| `tools/build-deck.js` | Builds `PneumoScreen-v2.pptx` (pptxgenjs) and embeds the video and screenshots |
+| `tools/build-deck.js` | Builds the deck (pptxgenjs) and embeds the video and screenshots. `DEMO_VIDEO` / `DEMO_POSTER` choose another video, e.g. the re-voiced one |
 
-The deck itself is `~/Downloads/PneumoScreen-v2.pptx`; the original `PneumoScreen.pptx` is unchanged.
+The decks live in `~/Downloads`: `PneumoScreen-v3.pptx` is the current one (17 slides, with the re-voiced demo video); `PneumoScreen-v2.pptx` and the original `PneumoScreen.pptx` are unchanged.
 
 ## Re-recording the demo
 
