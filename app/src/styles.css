@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+/* Light only: the dark theme was hard to read in the field. dark: classes only apply under .dark, which is never set. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@layer base {
+  html { font-size: 112.5%; color-scheme: light; -webkit-tap-highlight-color: transparent; }   /* 18px base */
+  body { @apply bg-slate-100 text-slate-900 antialiased; }
+}
+@layer components {
+  .field {
+    @apply mt-1.5 block min-h-12 w-full rounded-xl border-2 border-slate-300 bg-white px-3.5 text-base text-slate-900
+      placeholder:text-slate-500 focus:border-teal-700 focus:outline-none;
+  }
+}
