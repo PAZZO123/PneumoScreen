@@ -68,10 +68,11 @@ const WINDOW_MS = 5 * 60 * 1000;
 const MAX_FAILS = 10;
 
 export function login(db: DB, username: string, password: string): { token: string; worker: Worker; expires_at: string } | 'throttled' | null {
-  const key = username.toLowerCase();
+  // Usernames are stored lowercase; phones capitalise the first letter and autofill adds spaces.
+  const key = username.trim().toLowerCase();
   const recent = (failures.get(key) ?? []).filter((t) => Date.now() - t < WINDOW_MS);
   if (recent.length >= MAX_FAILS) return 'throttled';
-  const row = db.prepare('SELECT id, username, name, role, pw_hash, active FROM workers WHERE username = ?').get(username) as
+  const row = db.prepare('SELECT id, username, name, role, pw_hash, active FROM workers WHERE lower(username) = ?').get(key) as
     | (Worker & { pw_hash: string; active: number })
     | undefined;
   if (!row || !row.active || !verifyPassword(password, row.pw_hash)) {

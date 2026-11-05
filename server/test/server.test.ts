@@ -22,6 +22,12 @@ describe('auth', () => {
     expect((await get(c.tokens.a, '/api/me')).json()).toMatchObject({ username: 'alice', role: 'worker' });
   });
 
+  it('accepts the username in any case and with stray spaces', async () => {
+    for (const username of ['Alice', 'ALICE', ' alice ', 'alice\t'])
+      expect((await c.app.inject({ method: 'POST', url: '/api/login', payload: { username, password: 'alice-pass-123' } })).statusCode, username).toBe(200);
+    expect((await c.app.inject({ method: 'POST', url: '/api/login', payload: { username: 'Alice', password: 'ALICE-PASS-123' } })).statusCode).toBe(401);
+  });
+
   it('rejects wrong passwords and throttles repeated failures', async () => {
     const bad = () => c.app.inject({ method: 'POST', url: '/api/login', payload: { username: 'bob', password: 'wrong' } });
     expect((await bad()).statusCode).toBe(401);

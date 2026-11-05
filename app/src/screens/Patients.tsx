@@ -32,7 +32,7 @@ export function Login({ onDone }: { onDone: (m: api.Me) => void }) {
       <Card>
         <form onSubmit={submit} className="space-y-4">
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Username
-            <input name="username" autoComplete="username" autoCapitalize="none" required className="field" /></label>
+            <input name="username" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} required className="field" /></label>
           <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">Password
             <input name="password" type="password" autoComplete="current-password" required className="field" /></label>
           <Button big className="w-full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</Button>
